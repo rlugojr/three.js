@@ -36,7 +36,7 @@ var Viewport = function ( editor ) {
 
 	// helpers
 
-	var grid = new THREE.GridHelper( 30, 60 );
+	var grid = new THREE.GridHelper( 60, 60 );
 	sceneHelpers.add( grid );
 
 	//
@@ -133,14 +133,6 @@ var Viewport = function ( editor ) {
 	} );
 
 	sceneHelpers.add( transformControls );
-
-	// fog
-
-	var oldFogType = "None";
-	var oldFogColor = 0xaaaaaa;
-	var oldFogNear = 1;
-	var oldFogFar = 5000;
-	var oldFogDensity = 0.00025;
 
 	// object picking
 
@@ -297,28 +289,22 @@ var Viewport = function ( editor ) {
 
 	} );
 
-	var clearColor;
-
 	signals.themeChanged.add( function ( value ) {
 
 		switch ( value ) {
 
 			case 'css/light.css':
 				sceneHelpers.remove( grid );
-				grid = new THREE.GridHelper( 30, 60, 0x444444, 0x888888 );
+				grid = new THREE.GridHelper( 60, 60, 0x444444, 0x888888 );
 				sceneHelpers.add( grid );
-				clearColor = 0xaaaaaa;
 				break;
 			case 'css/dark.css':
 				sceneHelpers.remove( grid );
-				grid = new THREE.GridHelper( 30, 60, 0xbbbbbb, 0x888888 );
+				grid = new THREE.GridHelper( 60, 60, 0xbbbbbb, 0x888888 );
 				sceneHelpers.add( grid );
-				clearColor = 0x333333;
 				break;
 
 		}
-
-		renderer.setClearColor( clearColor );
 
 		render();
 
@@ -354,7 +340,6 @@ var Viewport = function ( editor ) {
 
 		renderer.autoClear = false;
 		renderer.autoUpdateScene = false;
-		renderer.setClearColor( clearColor );
 		renderer.setPixelRatio( window.devicePixelRatio );
 		renderer.setSize( container.dom.offsetWidth, container.dom.offsetHeight );
 
@@ -383,8 +368,6 @@ var Viewport = function ( editor ) {
 
 	} );
 
-	var saveTimeout;
-
 	signals.cameraChanged.add( function () {
 
 		render();
@@ -396,7 +379,7 @@ var Viewport = function ( editor ) {
 		selectionBox.visible = false;
 		transformControls.detach();
 
-		if ( object !== null ) {
+		if ( object !== null && object !== scene ) {
 
 			box.setFromObject( object );
 
@@ -496,25 +479,50 @@ var Viewport = function ( editor ) {
 
 	} );
 
-	signals.fogTypeChanged.add( function ( fogType ) {
+	// fog
 
-		if ( fogType !== oldFogType ) {
+	signals.sceneBackgroundChanged.add( function ( backgroundColor ) {
 
-			if ( fogType === "None" ) {
+		scene.background.setHex( backgroundColor );
 
-				scene.fog = null;
+		render();
 
-			} else if ( fogType === "Fog" ) {
+	} );
 
-				scene.fog = new THREE.Fog( oldFogColor, oldFogNear, oldFogFar );
+	var currentFogType = null;
 
-			} else if ( fogType === "FogExp2" ) {
+	signals.sceneFogChanged.add( function ( fogType, fogColor, fogNear, fogFar, fogDensity ) {
 
-				scene.fog = new THREE.FogExp2( oldFogColor, oldFogDensity );
+		if ( currentFogType !== fogType ) {
+
+			switch ( fogType ) {
+
+				case 'None':
+					scene.fog = null;
+					break;
+				case 'Fog':
+					scene.fog = new THREE.Fog();
+					break;
+				case 'FogExp2':
+					scene.fog = new THREE.FogExp2();
+					break;
 
 			}
 
-			oldFogType = fogType;
+			currentFogType = fogType;
+
+		}
+
+		if ( scene.fog instanceof THREE.Fog ) {
+
+			scene.fog.color.setHex( fogColor );
+			scene.fog.near = fogNear;
+			scene.fog.far = fogFar;
+
+		} else if ( scene.fog instanceof THREE.FogExp2 ) {
+
+			scene.fog.color.setHex( fogColor );
+			scene.fog.density = fogDensity;
 
 		}
 
@@ -522,27 +530,7 @@ var Viewport = function ( editor ) {
 
 	} );
 
-	signals.fogColorChanged.add( function ( fogColor ) {
-
-		oldFogColor = fogColor;
-
-		updateFog( scene );
-
-		render();
-
-	} );
-
-	signals.fogParametersChanged.add( function ( near, far, density ) {
-
-		oldFogNear = near;
-		oldFogFar = far;
-		oldFogDensity = density;
-
-		updateFog( scene );
-
-		render();
-
-	} );
+	//
 
 	signals.windowResize.add( function () {
 
@@ -568,20 +556,6 @@ var Viewport = function ( editor ) {
 	} );
 
 	//
-
-	function updateFog( root ) {
-
-		if ( root.fog ) {
-
-			root.fog.color.setHex( oldFogColor );
-
-			if ( root.fog.near !== undefined ) root.fog.near = oldFogNear;
-			if ( root.fog.far !== undefined ) root.fog.far = oldFogFar;
-			if ( root.fog.density !== undefined ) root.fog.density = oldFogDensity;
-
-		}
-
-	}
 
 	function animate() {
 
@@ -628,14 +602,12 @@ var Viewport = function ( editor ) {
 			vrControls.update();
 
 			camera.updateMatrixWorld();
-			renderer.clear();
 
 			vrEffect.render( scene, vrCamera );
 			vrEffect.render( sceneHelpers, vrCamera );
 
 		} else {
 
-			renderer.clear();
 			renderer.render( scene, camera );
 
 			if ( renderer instanceof THREE.RaytracingRenderer === false ) {
